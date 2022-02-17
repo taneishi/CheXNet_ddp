@@ -50,8 +50,8 @@ def main(args):
     #net.load_state_dict(torch.load(args.model_path, map_location=device))
     print('model state has loaded')
 
-    if torch.cuda.device_count() > 1:
-        net = torch.nn.DataParallel(net)
+    #if torch.cuda.device_count() > 1:
+    #    net = torch.nn.DataParallel(net)
 
     net = net.to(device)
 
@@ -82,8 +82,8 @@ def main(args):
             optimizer.step()
             train_loss += loss.item()
 
-            y_true = torch.cat((y_true, labels), 0)
-            y_pred = torch.cat((y_pred, outputs.detach()), 0)
+            y_true = torch.cat((y_true, labels.cpu()), 0)
+            y_pred = torch.cat((y_pred, outputs.detach().cpu()), 0)
                 
             print('\rbatch % 5d/% 5d train loss %6.4f' % (index+1, len(train_loader), train_loss / (index+1)), end='')
             print(' %6.3fsec' % (timeit.default_timer() - start_time), end='')
