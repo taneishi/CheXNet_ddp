@@ -47,7 +47,7 @@ bash run.sh
 The following scripts are used to perform inference on the PyTorch, FP32 optimized and INT8 quantized models, respectively.
 
 ```bash
-python train.py
+python main.py
 ```
 
 ## Results
