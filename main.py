@@ -16,10 +16,11 @@ def main(args):
     net = DenseNet121(N_CLASSES)
     net.load_state_dict(torch.load(args.model_path, map_location=device))
     print('model state has loaded')
+
     if torch.cuda.device_count() > 1:
-        net = torch.nn.DataParallel(net).to(device)
-    else:
-        net = net.to(device)
+        net = torch.nn.DataParallel(net)
+
+    net = net.to(device)
 
     # switch to evaluate mode
     net.eval()
@@ -49,7 +50,7 @@ def main(args):
     gt = torch.FloatTensor()
     pred = torch.FloatTensor()
 
-    for index, (data, target) in enumerate(test_loader):
+    for index, (data, target) in enumerate(test_loader, 1):
         start_time = timeit.default_timer()
 
         # each image has 10 crops.
@@ -61,13 +62,16 @@ def main(args):
 
         outputs_mean = outputs.view(batch_size, n_crops, -1).mean(1)
 
-        gt = torch.cat((gt, target))
-        pred = torch.cat((pred, outputs_mean))
+        gt = torch.cat((gt, target.cpu()))
+        pred = torch.cat((pred, outputs_mean.cpu()))
             
-        print('batch %03d/%03d %6.3fsec' % (index, len(test_loader), (timeit.default_timer() - start_time)))
+        print('\rbatch %4d/%4d %6.3fsec' % (index, len(test_loader), (timeit.default_timer() - start_time)), end='')
+
+        if index % (len(test_loader) / 10) == 0:
+            print('')
 
     AUCs = [roc_auc_score(gt[:, i], pred[:, i]) for i in range(N_CLASSES)]
-    print('The average AUC is %6.3f' % np.mean(AUCs))
+    print('\nThe average AUC is %6.3f' % np.mean(AUCs))
 
     for i in range(N_CLASSES):
         print('The AUC of %s is %6.3f' % (CLASS_NAMES[i], AUCs[i]))
@@ -75,7 +79,7 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_path', default='model/model.pth', type=str)
-    parser.add_argument('--batch_size', default=10, type=int)
+    parser.add_argument('--batch_size', default=16, type=int)
     parser.add_argument('--data_dir', default='images', type=str)
     parser.add_argument('--test_image_list', default='labels/test_list.txt', type=str)
     args = parser.parse_args()
