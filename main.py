@@ -48,8 +48,8 @@ def main(args):
             shuffle=False, 
             pin_memory=False)
 
-    print('training batches: %d' % (len(train_loader)))
-    print('validation batches: %d' % (len(val_loader)))
+    print('training %d batches %d images' % (len(train_loader), len(train_dataset)))
+    print('validation %d batches %d images' % (len(val_loader), len(val_dataset)))
     
     # initialize and load the model
     net = DenseNet121(N_CLASSES)
@@ -86,7 +86,7 @@ def main(args):
             optimizer.step()
             train_loss += loss.item()
 
-            print('\rbatch %5d/%5d train loss %6.4f' % (index+1, len(train_loader), train_loss / (index+1)), end='')
+            print('\repoch %3d batch %5d/%5d train loss %6.4f' % (epoch+1, index+1, len(train_loader), train_loss / (index+1)), end='')
             print(' %6.3fsec' % (timeit.default_timer() - start_time), end='')
 
         print('')
@@ -96,7 +96,7 @@ def main(args):
         y_pred = torch.FloatTensor()
 
         net.eval()
-        for index, (data, target) in enumerate(test_loader, 1):
+        for index, (data, target) in enumerate(val_loader, 1):
             start_time = timeit.default_timer()
 
             # each image has 10 crops.
@@ -111,10 +111,7 @@ def main(args):
             y_true = torch.cat((y_true, target.cpu()))
             y_pred = torch.cat((y_pred, outputs_mean.cpu()))
                 
-            print('\rbatch %4d/%4d %6.3fsec' % (index, len(test_loader), (timeit.default_timer() - start_time)), end='')
-
-            if index % (len(test_loader) / 10) == 0:
-                print('')
+            print('\rbatch %4d/%4d %6.3fsec' % (index, len(val_loader), (timeit.default_timer() - start_time)), end='')
 
         AUCs = [roc_auc_score(y_true[:, i], y_pred[:, i]) for i in range(N_CLASSES)]
         print('\nThe average AUC is %6.3f' % np.mean(AUCs))
