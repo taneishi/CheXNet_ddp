@@ -23,6 +23,26 @@ This data set is divided into training set (70%), validation set (10%), and test
 
 - [ChestX-ray14](https://nihcc.app.box.com/v/ChestXray-NIHCC) 
 
+The percentages of each disease are following.
+
+```
+                     train     val    test
+Atelectasis         10.190   9.974  10.788
+Cardiomegaly         2.485   2.139   2.594
+Effusion            11.802  11.516  12.277
+Infiltration        17.732  17.987  17.554
+Mass                 5.082   5.571   5.051
+Nodule               5.576   5.464   5.951
+Pneumonia            1.246   1.185   1.079
+Pneumothorax         4.722   4.492   4.854
+Consolidation        4.158   3.984   4.266
+Edema                2.154   1.783   1.841
+Emphysema            2.293   1.854   2.269
+Fibrosis             1.476   1.480   1.614
+Pleural_Thickening   2.904   3.316   3.272
+Hernia               0.184   0.365   0.187
+```
+
 ## Model
 
 As a model, I use an improved version of *CheXNet*, a model proposed by Rajpurkar et al. that takes chest X-ray images as input and performs multi-label classification for each chest disease. 
