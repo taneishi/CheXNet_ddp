@@ -127,8 +127,8 @@ if __name__ == '__main__':
     parser.add_argument('--lr', default=1e-4, type=float)
     parser.add_argument('--momentum', default=0.9, type=float)
     parser.add_argument('--data_dir', default='images', type=str)
-    parser.add_argument('--train_image_list', default='labels/train_list.txt', type=str)
-    parser.add_argument('--val_image_list', default='labels/val_list.txt', type=str)
+    parser.add_argument('--train_image_list', default='labels/bmt_list.txt', type=str)
+    parser.add_argument('--val_image_list', default='labels/bmt_list.txt', type=str)
     args = parser.parse_args()
     print(vars(args))
 
