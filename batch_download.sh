@@ -16,3 +16,8 @@ done
 
 echo "Download complete. Please check the checksums"
 sha256sum -c SHA256_checksums.txt
+
+for i in $(seq 1 2)
+do
+    tar zxf images_${i}.tar.gz
+done

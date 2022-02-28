@@ -11,14 +11,13 @@ fi
 if [ -d torch ]; then
     source torch/bin/activate
 else
-    python3 -m venv torch
+    python3.7 -m venv torch
     source torch/bin/activate
     pip install --upgrade pip
-    pip install torchvision scikit-learn
 fi
 
 CPUS=2
-CORES=32
+CORES=24
 TOTAL_CORES=$((${CPUS}*${CORES}))
 
 echo "CPUS=${CPUS} CORES=${CORES} TOTAL_CORES=${TOTAL_CORES}"
