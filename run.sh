@@ -8,14 +8,6 @@ if [ ${PBS_O_WORKDIR} ]; then
     cd ${PBS_O_WORKDIR}
 fi
 
-if [ -d torch ]; then
-    source torch/bin/activate
-else
-    python3.7 -m venv torch
-    source torch/bin/activate
-    pip install --upgrade pip
-fi
-
 CPUS=2
 CORES=24
 TOTAL_CORES=$((${CPUS}*${CORES}))
