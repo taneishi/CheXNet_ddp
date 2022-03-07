@@ -8,14 +8,7 @@ if [ ${PBS_O_WORKDIR} ]; then
     cd ${PBS_O_WORKDIR}
 fi
 
-if [ -d torch ]; then
-    source torch/bin/activate
-else
-    python3 -m venv torch
-    source torch/bin/activate
-    pip install --upgrade pip
-    pip install torchvision scikit-learn
-fi
+pip install -r requirements.txt
 
 CPUS=2
 CORES=32
