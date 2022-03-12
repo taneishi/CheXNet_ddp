@@ -1,5 +1,5 @@
 #!/bin/bash
-#PBS -l nodes=1:gold6338n
+#PBS -l nodes=1:ppn=2
 #PBS -N chexnet
 #PBS -j oe
 #PBS -o output.log
@@ -16,4 +16,5 @@ echo "CPUS=${CPUS} CORES=${CORES} TOTAL_CORES=${TOTAL_CORES}"
 export OMP_NUM_THREADS=${TOTAL_CORES}
 export KMP_SETTING="KMP_AFFINITY=granularity=fine,compact,1,0"
 
-python main.py
+bash batch_download.sh
+python3.7 main.py

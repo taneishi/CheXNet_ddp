@@ -5,6 +5,7 @@ import torch
 from sklearn.metrics import roc_auc_score
 import argparse
 import timeit
+import os
 
 from habana_frameworks.torch.utils.library_loader import load_habana_module
 import habana_frameworks.torch.core as htcore
@@ -49,6 +50,7 @@ def permute_momentum(optimizer, to_filters_last, lazy_mode):
         htcore.mark_step()
 
 def main(args):
+    load_habana_module()
     device = torch.device('hpu')
     print('Using %s device.' % device)
 
@@ -103,11 +105,12 @@ def main(args):
 
     net = net.to(device)
 
+    optimizer = torch.optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum)
+
     permute_params(net, True, args.use_lazy_mode)
     permute_momentum(optimizer, True, args.use_lazy_mode)
 
     criterion = torch.nn.MultiLabelSoftMarginLoss()
-    optimizer = torch.optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum)
 
     for epoch in range(args.epochs):
         start_time = timeit.default_timer()
@@ -120,13 +123,13 @@ def main(args):
             images = images.view(-1, c, h, w).to(device)
             labels = labels.to(device)
 
-            outputs = net(images)
+            optimizer.zero_grad()
 
+            outputs = net(images)
             outputs = outputs.view(batch_size, n_crops, -1).mean(1)
             loss = criterion(outputs, labels)
 
             # backward and optimize
-            optimizer.zero_grad()
             loss.backward()
             htcore.mark_step()
             optimizer.step()
@@ -162,13 +165,12 @@ def main(args):
 
         AUCs = [roc_auc_score(y_true[:, i], y_pred[:, i]) for i in range(N_CLASSES)]
         print('\nThe average AUC is %6.3f' % np.mean(AUCs))
-
         for i in range(N_CLASSES):
             print('The AUC of %s is %6.3f' % (CLASS_NAMES[i], AUCs[i]))
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model_path', default='model/model.pth', type=str)
+    parser.add_argument('--model_path', default=None, type=str)
     parser.add_argument('--epochs', default=100, type=int)
     parser.add_argument('--batch_size', default=4, type=int)
     parser.add_argument('--lr', default=1e-4, type=float)

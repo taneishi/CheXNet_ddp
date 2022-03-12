@@ -19,5 +19,5 @@ sha256sum -c SHA256_checksums.txt
 
 for i in $(seq 1 2)
 do
-    tar zxf images_${i}.tar.gz
+    tar zxf images_0${i}.tar.gz
 done
