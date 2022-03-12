@@ -6,12 +6,56 @@ from sklearn.metrics import roc_auc_score
 import argparse
 import timeit
 
+from habana_frameworks.torch.utils.library_loader import load_habana_module
+import habana_frameworks.torch.core as htcore
+import habana_frameworks.torch.core.hccl
+
 from datasets import ChestXrayDataSet
 from model import DenseNet121, CLASS_NAMES, N_CLASSES
 
+def permute_params(model, to_filters_last, lazy_mode):
+    if htcore.is_enabled_weight_permute_pass() is True:
+        return
+
+    with torch.no_grad():
+        for name, param in model.named_parameters():
+            if(param.ndim == 4):
+                if to_filters_last:
+                    param.data = param.data.permute((2, 3, 1, 0))
+                else:
+                    param.data = param.data.permute((3, 2, 0, 1))  # permute RSCK to KCRS
+
+    if lazy_mode:
+        htcore.mark_step()
+
+def permute_momentum(optimizer, to_filters_last, lazy_mode):
+    # Permute the momentum buffer before using for checkpoint
+    if htcore.is_enabled_weight_permute_pass() is True:
+        return
+
+    for group in optimizer.param_groups:
+        for p in group['params']:
+            param_state = optimizer.state[p]
+            if 'momentum_buffer' in param_state:
+                buf = param_state['momentum_buffer']
+                if(buf.ndim == 4):
+                    if to_filters_last:
+                        buf = buf.permute((2,3,1,0))
+                    else:
+                        buf = buf.permute((3,2,0,1))
+                    param_state['momentum_buffer'] = buf
+
+    if lazy_mode:
+        htcore.mark_step()
+
 def main(args):
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('hpu')
     print('Using %s device.' % device)
+
+    torch.cuda.current_device = lambda: None
+    torch.cuda.set_device = lambda x: None
+
+    os.environ['PT_HPU_LAZY_MODE'] = '1'
 
     normalize = transforms.Normalize(
             [0.485, 0.456, 0.406],
@@ -53,13 +97,14 @@ def main(args):
     
     # initialize and load the model
     net = DenseNet121(N_CLASSES)
-    #net.load_state_dict(torch.load(args.model_path, map_location=device))
-    print('model state has loaded')
-
-    if torch.cuda.device_count() > 1:
-        net = torch.nn.DataParallel(net)
+    if args.model_path:
+        net.load_state_dict(torch.load(args.model_path, map_location=device))
+        print('model state has loaded')
 
     net = net.to(device)
+
+    permute_params(net, True, args.use_lazy_mode)
+    permute_momentum(optimizer, True, args.use_lazy_mode)
 
     criterion = torch.nn.MultiLabelSoftMarginLoss()
     optimizer = torch.optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum)
@@ -83,7 +128,9 @@ def main(args):
             # backward and optimize
             optimizer.zero_grad()
             loss.backward()
+            htcore.mark_step()
             optimizer.step()
+            htcore.mark_step()
             train_loss += loss.item()
 
             print('\repoch %3d batch %5d/%5d train loss %6.4f' % (epoch+1, index+1, len(train_loader), train_loss / (index+1)), end='')
@@ -129,6 +176,7 @@ if __name__ == '__main__':
     parser.add_argument('--data_dir', default='images', type=str)
     parser.add_argument('--train_image_list', default='labels/bmt_list.txt', type=str)
     parser.add_argument('--val_image_list', default='labels/bmt_list.txt', type=str)
+    parser.add_argument('--use_lazy_mode', action='store_true', default=True)
     args = parser.parse_args()
     print(vars(args))
 
