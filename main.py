@@ -110,7 +110,8 @@ def main(args):
     permute_params(net, True, args.use_lazy_mode)
     permute_momentum(optimizer, True, args.use_lazy_mode)
 
-    criterion = torch.nn.MultiLabelSoftMarginLoss()
+    #criterion = torch.nn.MultiLabelSoftMarginLoss()
+    criterion = torch.nn.CrossEntropyLoss()
 
     for epoch in range(args.epochs):
         start_time = timeit.default_timer()
