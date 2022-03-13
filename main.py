@@ -57,7 +57,7 @@ def main(args):
     else:
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    print('Using %s device.' % device)
+    print('Using %s device.' % (device))
 
     normalize = transforms.Normalize(
             [0.485, 0.456, 0.406],
@@ -89,6 +89,10 @@ def main(args):
     if args.model_path:
         net.load_state_dict(torch.load(args.model_path, map_location=device))
         print('model state has loaded')
+
+    if torch.cuda.device_count() > 1:
+        net = torch.nn.DataParallel(net)
+        print('Using %d cuda devices' % (torch.cuda.device_count()))
 
     net = net.to(device)
 
@@ -127,7 +131,8 @@ def main(args):
             train_loss += loss.item()
 
             print('\repoch %3d batch %5d/%5d train loss %6.4f' % (epoch+1, index+1, len(train_loader), train_loss / (index+1)), end='')
-            print(' %6.3fsec' % (timeit.default_timer() - start_time))
+            print(' %6.3fsec' % (timeit.default_timer() - start_time), end='')
+        print('')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
