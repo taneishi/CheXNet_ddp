@@ -88,14 +88,7 @@ def main(args):
             transform=transform,
             )
 
-    val_loader = torch.utils.data.DataLoader(
-            dataset=val_dataset, 
-            batch_size=args.batch_size, 
-            shuffle=False, 
-            pin_memory=False)
-
     print('training %d batches %d images' % (len(train_loader), len(train_dataset)))
-    print('validation %d batches %d images' % (len(val_loader), len(val_dataset)))
     
     # initialize and load the model
     net = DenseNet121(N_CLASSES)
@@ -138,36 +131,7 @@ def main(args):
             train_loss += loss.item()
 
             print('\repoch %3d batch %5d/%5d train loss %6.4f' % (epoch+1, index+1, len(train_loader), train_loss / (index+1)), end='')
-            print(' %6.3fsec' % (timeit.default_timer() - start_time), end='')
-
-        print('')
-
-        # initialize the ground truth and output tensor
-        y_true = torch.FloatTensor()
-        y_pred = torch.FloatTensor()
-
-        net.eval()
-        for index, (data, target) in enumerate(val_loader, 1):
-            start_time = timeit.default_timer()
-
-            # each image has 10 crops.
-            batch_size, n_crops, c, h, w = data.size()
-            data = data.view(-1, c, h, w).to(device)
-
-            with torch.no_grad():
-                outputs = net(data)
-
-            outputs_mean = outputs.view(batch_size, n_crops, -1).mean(1)
-
-            y_true = torch.cat((y_true, target.cpu()))
-            y_pred = torch.cat((y_pred, outputs_mean.cpu()))
-                
-            print('\rbatch %4d/%4d %6.3fsec' % (index, len(val_loader), (timeit.default_timer() - start_time)), end='')
-
-        AUCs = [roc_auc_score(y_true[:, i], y_pred[:, i]) for i in range(N_CLASSES)]
-        print('\nThe average AUC is %6.3f' % np.mean(AUCs))
-        for i in range(N_CLASSES):
-            print('The AUC of %s is %6.3f' % (CLASS_NAMES[i], AUCs[i]))
+            print(' %6.3fsec' % (timeit.default_timer() - start_time))
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -178,7 +142,6 @@ if __name__ == '__main__':
     parser.add_argument('--momentum', default=0.9, type=float)
     parser.add_argument('--data_dir', default='images', type=str)
     parser.add_argument('--train_image_list', default='labels/bmt_list.txt', type=str)
-    parser.add_argument('--val_image_list', default='labels/bmt_list.txt', type=str)
     parser.add_argument('--use_lazy_mode', action='store_true', default=True)
     args = parser.parse_args()
     print(vars(args))
