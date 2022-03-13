@@ -7,10 +7,6 @@ import argparse
 import timeit
 import os
 
-from habana_frameworks.torch.utils.library_loader import load_habana_module
-import habana_frameworks.torch.core as htcore
-import habana_frameworks.torch.core.hccl
-
 from datasets import ChestXrayDataSet
 from model import DenseNet121, CLASS_NAMES, N_CLASSES
 
@@ -50,14 +46,18 @@ def permute_momentum(optimizer, to_filters_last, lazy_mode):
         htcore.mark_step()
 
 def main(args):
-    load_habana_module()
-    device = torch.device('hpu')
+    if args.hpu:
+        from habana_frameworks.torch.utils.library_loader import load_habana_module
+        import habana_frameworks.torch.core as htcore
+        load_habana_module()
+        device = torch.device('hpu')
+        torch.cuda.current_device = lambda: None
+        torch.cuda.set_device = lambda x: None
+        os.environ['PT_HPU_LAZY_MODE'] = '1'
+    else:
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
     print('Using %s device.' % device)
-
-    torch.cuda.current_device = lambda: None
-    torch.cuda.set_device = lambda x: None
-
-    os.environ['PT_HPU_LAZY_MODE'] = '1'
 
     normalize = transforms.Normalize(
             [0.485, 0.456, 0.406],
@@ -82,12 +82,6 @@ def main(args):
             shuffle=True, 
             pin_memory=False)
 
-    val_dataset = ChestXrayDataSet(
-            data_dir=args.data_dir,
-            image_list_file=args.val_image_list,
-            transform=transform,
-            )
-
     print('training %d batches %d images' % (len(train_loader), len(train_dataset)))
     
     # initialize and load the model
@@ -100,10 +94,10 @@ def main(args):
 
     optimizer = torch.optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum)
 
-    permute_params(net, True, args.use_lazy_mode)
-    permute_momentum(optimizer, True, args.use_lazy_mode)
+    if args.hpu:
+        permute_params(net, True, args.use_lazy_mode)
+        permute_momentum(optimizer, True, args.use_lazy_mode)
 
-    #criterion = torch.nn.MultiLabelSoftMarginLoss()
     criterion = torch.nn.CrossEntropyLoss()
 
     for epoch in range(args.epochs):
@@ -125,9 +119,11 @@ def main(args):
 
             # backward and optimize
             loss.backward()
-            htcore.mark_step()
+            if args.hpu:
+                htcore.mark_step()
             optimizer.step()
-            htcore.mark_step()
+            if args.hpu:
+                htcore.mark_step()
             train_loss += loss.item()
 
             print('\repoch %3d batch %5d/%5d train loss %6.4f' % (epoch+1, index+1, len(train_loader), train_loss / (index+1)), end='')
@@ -142,6 +138,7 @@ if __name__ == '__main__':
     parser.add_argument('--momentum', default=0.9, type=float)
     parser.add_argument('--data_dir', default='images', type=str)
     parser.add_argument('--train_image_list', default='labels/bmt_list.txt', type=str)
+    parser.add_argument('--hpu', action='store_true', default=False)
     parser.add_argument('--use_lazy_mode', action='store_true', default=True)
     args = parser.parse_args()
     print(vars(args))
