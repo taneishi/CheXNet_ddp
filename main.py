@@ -82,17 +82,17 @@ def main(args):
             shuffle=True, 
             pin_memory=False)
 
-    print('training %d batches %d images' % (len(train_loader), len(train_dataset)))
+    print('training %d batches %d images.' % (len(train_loader), len(train_dataset)))
     
     # initialize and load the model
     net = DenseNet121(N_CLASSES)
     if args.model_path:
         net.load_state_dict(torch.load(args.model_path, map_location=device))
-        print('model state has loaded')
+        print('model state has loaded.')
 
-    if torch.cuda.device_count() > 1:
+    if args.dataparallel and torch.cuda.device_count() > 1:
         net = torch.nn.DataParallel(net)
-        print('Using %d cuda devices' % (torch.cuda.device_count()))
+        print('Using %d cuda devices.' % (torch.cuda.device_count()))
 
     net = net.to(device)
 
@@ -106,33 +106,43 @@ def main(args):
 
     for epoch in range(args.epochs):
         start_time = timeit.default_timer()
-
+        y_true = torch.FloatTensor()
+        y_pred = torch.FloatTensor()
         train_loss = 0
         net.train()
-        for index, (images, labels) in enumerate(train_loader):
+        for index, (images, labels) in enumerate(train_loader, 1):
             # each image has 10 crops.
             batch_size, n_crops, c, h, w = images.size()
             images = images.view(-1, c, h, w).to(device)
             labels = labels.to(device)
 
-            optimizer.zero_grad()
-
             outputs = net(images)
             outputs = outputs.view(batch_size, n_crops, -1).mean(1)
             loss = criterion(outputs, labels)
+            train_loss += loss.item()
 
             # backward and optimize
+            optimizer.zero_grad()
             loss.backward()
             if args.hpu:
                 htcore.mark_step()
             optimizer.step()
             if args.hpu:
                 htcore.mark_step()
-            train_loss += loss.item()
 
-            print('\repoch %3d batch %5d/%5d train loss %6.4f' % (epoch+1, index+1, len(train_loader), train_loss / (index+1)), end='')
+            y_true = torch.cat((y_true, labels.cpu()))
+            y_pred = torch.cat((y_pred, outputs.detach().cpu()))
+
+            print('\repoch %3d/%3d batch %5d/%5d' % (epoch+1, args.epochs, index, len(train_loader)), end='')
+            print(' train loss %6.4f' % (train_loss / index), end='')
             print(' %6.3fsec' % (timeit.default_timer() - start_time), end='')
+
         print('')
+        aucs = [roc_auc_score(y_true[:, i], y_pred[:, i]) for i in range(N_CLASSES)]
+        auc_classes = ' '.join(['%5.3f' % (aucs[i]) for i in range(N_CLASSES)])
+        print('The average AUC is %5.3f (%s)' % (np.mean(aucs), auc_classes))
+
+        torch.save(net.state_dict(), 'model/checkpoint.pth')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -145,6 +155,7 @@ if __name__ == '__main__':
     parser.add_argument('--train_image_list', default='labels/bmt_list.txt', type=str)
     parser.add_argument('--hpu', action='store_true', default=False)
     parser.add_argument('--use_lazy_mode', action='store_true', default=True)
+    parser.add_argument('--dataparallel', action='store_true', default=False)
     args = parser.parse_args()
     print(vars(args))
 
