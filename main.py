@@ -115,7 +115,45 @@ def main(args):
 
         aucs = [roc_auc_score(y_true[:, i], y_pred[:, i]) for i in range(N_CLASSES)]
         auc_classes = ' '.join(['%5.3f' % (aucs[i]) for i in range(N_CLASSES)])
-        print('The average AUC is %5.3f (%s)' % (np.mean(aucs), auc_classes), end='')
+        print(' The average AUC is %5.3f (%s)' % (np.mean(aucs), auc_classes), end='')
+
+    test_dataset = ChestXrayDataSet(
+            data_dir=args.data_dir,
+            image_list_file=args.test_image_list,
+            transform=transform,
+            )
+    
+    test_loader = torch.utils.data.DataLoader(
+            dataset=test_dataset,
+            batch_size=args.batch_size,
+            shuffle=False,
+            pin_memory=False)
+
+    print('test %d batches %d images' % (len(test_loader), len(test_dataset)))
+
+    y_true = torch.FloatTensor()
+    y_pred = torch.FloatTensor()
+
+    net.eval()
+    for index, (data, labels) in enumerate(test_loader):
+        start_time = timeit.default_timer()
+
+        batch_size, n_crops, c, h, w = data.size()
+        data = data.view(-1, c, h, w)
+
+        with torch.no_grad():
+            outputs = net(data)
+        outputs = outputs.view(batch_size, n_crops, -1).mean(1)
+        outputs = outputs.numpy()
+
+        y_true = torch.cat((y_true, labels), 0)
+        y_pred = torch.cat((y_pred, torch.from_numpy(outputs)), 0)
+        
+        print('\r%4d/%4d, time: %6.3fsec' % (index, len(test_loader), (timeit.default_timer() - start_time)), end='')
+
+        aucs = [roc_auc_score(y_true[:, i], y_pred[:, i]) if y_true[:, i].sum() > 0 else np.nan for i in range(N_CLASSES)]
+        auc_classes = ' '.join(['%5.3f' % (aucs[i]) for i in range(N_CLASSES)])
+        print(' The average AUC is %5.3f (%s)' % (np.mean(aucs), auc_classes), end='')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -127,6 +165,7 @@ if __name__ == '__main__':
     parser.add_argument('--data_dir', default='images', type=str)
     parser.add_argument('--train_image_list', default='labels/train_list.txt', type=str)
     parser.add_argument('--val_image_list', default='labels/val_list.txt', type=str)
+    parser.add_argument('--test_image_list', default='labels/test_list.txt', type=str)
     args = parser.parse_args()
     print(vars(args))
 
