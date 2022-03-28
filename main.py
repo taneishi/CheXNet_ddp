@@ -137,10 +137,9 @@ def main(args):
             print(' train loss %6.4f' % (train_loss / index), end='')
             print(' %6.3fsec' % (timeit.default_timer() - start_time), end='')
 
-        print('')
         aucs = [roc_auc_score(y_true[:, i], y_pred[:, i]) for i in range(N_CLASSES)]
         auc_classes = ' '.join(['%5.3f' % (aucs[i]) for i in range(N_CLASSES)])
-        print('The average AUC is %5.3f (%s)' % (np.mean(aucs), auc_classes))
+        print(' average AUC %5.3f (%s)' % (np.mean(aucs), auc_classes))
 
         torch.save(net.state_dict(), 'model/checkpoint.pth')
 
