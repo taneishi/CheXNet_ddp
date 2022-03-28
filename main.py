@@ -147,7 +147,7 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_path', default=None, type=str)
-    parser.add_argument('--epochs', default=100, type=int)
+    parser.add_argument('--epochs', default=150, type=int)
     parser.add_argument('--batch_size', default=4, type=int)
     parser.add_argument('--lr', default=1e-4, type=float)
     parser.add_argument('--momentum', default=0.9, type=float)
