@@ -113,11 +113,9 @@ def main(args):
                 
             print('\rbatch %4d/%4d %6.3fsec' % (index, len(val_loader), (timeit.default_timer() - start_time)), end='')
 
-        AUCs = [roc_auc_score(y_true[:, i], y_pred[:, i]) for i in range(N_CLASSES)]
-        print('\nThe average AUC is %6.3f' % np.mean(AUCs))
-
-        for i in range(N_CLASSES):
-            print('The AUC of %s is %6.3f' % (CLASS_NAMES[i], AUCs[i]))
+        aucs = [roc_auc_score(y_true[:, i], y_pred[:, i]) for i in range(N_CLASSES)]
+        auc_classes = ' '.join(['%5.3f' % (aucs[i]) for i in range(N_CLASSES)])
+        print('The average AUC is %5.3f (%s)' % (np.mean(aucs), auc_classes), end='')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
