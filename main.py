@@ -115,7 +115,7 @@ def main(args):
 
         aucs = [roc_auc_score(y_true[:, i], y_pred[:, i]) for i in range(N_CLASSES)]
         auc_classes = ' '.join(['%5.3f' % (aucs[i]) for i in range(N_CLASSES)])
-        print(' The average AUC is %5.3f (%s)' % (np.mean(aucs), auc_classes), end='')
+        print(' average AUC %5.3f (%s)' % (np.mean(aucs), auc_classes), end='')
 
     test_dataset = ChestXrayDataSet(
             data_dir=args.data_dir,
