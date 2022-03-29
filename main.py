@@ -55,7 +55,7 @@ def main(args):
         torch.cuda.set_device = lambda x: None
         os.environ['PT_HPU_LAZY_MODE'] = '1'
     else:
-        device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     print('Using %s device.' % (device))
 
@@ -121,6 +121,9 @@ def main(args):
     for epoch in range(args.epochs):
         start_time = timeit.default_timer()
 
+        # initialize the ground truth and output tensor
+        y_true = torch.FloatTensor()
+        y_pred = torch.FloatTensor()
         train_loss = 0
         net.train()
         for index, (images, labels) in enumerate(train_loader, 1):
@@ -131,9 +134,12 @@ def main(args):
 
             outputs = net(images)
 
-            outputs = outputs.view(batch_size, n_crops, -1).mean(1)
-            loss = criterion(outputs, labels)
+            outputs_mean = outputs.view(batch_size, n_crops, -1).mean(1)
+            loss = criterion(outputs_mean, labels)
             train_loss += loss.item()
+
+            y_true = torch.cat((y_true, labels.cpu()))
+            y_pred = torch.cat((y_pred, outputs_mean.detach().cpu()))
 
             # backward and optimize
             optimizer.zero_grad()
@@ -147,9 +153,11 @@ def main(args):
             print('\repoch %3d batch %5d/%5d train loss %6.4f' % (epoch+1, index, len(train_loader), train_loss / index), end='')
             print(' %6.3fsec' % (timeit.default_timer() - start_time), end='')
 
+            aucs = [roc_auc_score(y_true[:, i], y_pred[:, i]) if y_true[:, i].sum() > 0 else np.nan for i in range(N_CLASSES)]
+            print(' average AUC %5.3f' % (np.mean(aucs)), end='')
+
         print('')
 
-        # initialize the ground truth and output tensor
         y_true = torch.FloatTensor()
         y_pred = torch.FloatTensor()
 
@@ -157,7 +165,6 @@ def main(args):
         for index, (images, labels) in enumerate(val_loader, 1):
             start_time = timeit.default_timer()
 
-            # each image has 10 crops.
             batch_size, n_crops, c, h, w = images.size()
             images = images.view(-1, c, h, w).to(device)
 
@@ -203,6 +210,7 @@ def main(args):
 
         with torch.no_grad():
             outputs = net(images)
+
         output_mean = outputs.view(batch_size, n_crops, -1).mean(1)
 
         y_true = torch.cat((y_true, labels.cpu()))
