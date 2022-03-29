@@ -1,5 +1,5 @@
 #!/bin/bash
-#PBS -l nodes=1:gold6338n
+#PBS -l nodes=1:gold6330
 #PBS -N chexnet
 #PBS -j oe
 #PBS -o output.log
@@ -11,7 +11,7 @@ fi
 pip install -r requirements.txt
 
 CPUS=2
-CORES=32
+CORES=24
 TOTAL_CORES=$((${CPUS}*${CORES}))
 
 echo "CPUS=${CPUS} CORES=${CORES} TOTAL_CORES=${TOTAL_CORES}"

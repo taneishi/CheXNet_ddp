@@ -1,4 +1,4 @@
-# Optimization and quantization of a classification model for thoracic diseases using OpenVINO
+# Optimization of a classification model for thoracic diseases with PyTorch on Habana Gaudi and CUDA device.
 
 ## Introduction
 
