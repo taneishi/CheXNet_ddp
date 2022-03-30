@@ -21,5 +21,4 @@ echo "CPUS=${CPUS} CORES=${CORES} TOTAL_CORES=${TOTAL_CORES} HPUS=${HPUS}"
 export OMP_NUM_THREADS=${CORES_PER_PROC}
 export KMP_SETTING="KMP_AFFINITY=granularity=fine,compact,1,0"
 
-python stats.py
-torchrun --nnodes=1 --nproc_per_node=${HPUS} main.py --batch_size 64
+torchrun --nnodes=1 --nproc_per_node=${HPUS} main.py --batch_size 4

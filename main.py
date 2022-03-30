@@ -11,6 +11,7 @@ from datasets import ChestXrayDataSet
 from model import DenseNet121, CLASS_NAMES, N_CLASSES
 
 def permute_params(model, to_filters_last, lazy_mode):
+    import habana_frameworks.torch.core as htcore
     if htcore.is_enabled_weight_permute_pass() is True:
         return
 
@@ -26,6 +27,7 @@ def permute_params(model, to_filters_last, lazy_mode):
         htcore.mark_step()
 
 def permute_momentum(optimizer, to_filters_last, lazy_mode):
+    import habana_frameworks.torch.core as htcore
     # Permute the momentum buffer before using for checkpoint
     if htcore.is_enabled_weight_permute_pass() is True:
         return
@@ -45,17 +47,51 @@ def permute_momentum(optimizer, to_filters_last, lazy_mode):
     if lazy_mode:
         htcore.mark_step()
 
+def init_distributed_mode(args):
+    if args.hpu:
+        import habana_frameworks.torch.core.hccl
+
+    world_size = int(os.environ[args.env_world_size])
+    local_rank = int(os.environ[args.env_rank])
+
+    print('distributed init (rank {})'.format(local_rank), flush=True)
+
+    if args.hpu:
+        os.environ['ID'] = str(local_rank)
+        # not used currently
+        os.environ['LOCAL_RANK'] = str(local_rank)
+        backend = 'hccl'
+    else:
+        torch.cuda.set_device(local_rank)
+        backend = 'nccl'
+
+    torch.distributed.init_process_group(backend=backend, world_size=world_size, rank=local_rank)
+
 def main(args):
+    torch.manual_seed(123)
+    torch.multiprocessing.set_start_method('spawn')
+
+    world_size = int(os.environ[args.env_world_size])
+    local_rank = int(os.environ[args.env_rank])
+
+    if local_rank == 0:
+        print(vars(args))
+
     if args.hpu:
         from habana_frameworks.torch.utils.library_loader import load_habana_module
         import habana_frameworks.torch.core as htcore
         load_habana_module()
         device = torch.device('hpu')
+
         torch.cuda.current_device = lambda: None
         torch.cuda.set_device = lambda x: None
+
         os.environ['PT_HPU_LAZY_MODE'] = '1'
     else:
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    if world_size > 1:
+        init_distributed_mode(args)
 
     print('Using %s device.' % (device))
 
@@ -76,11 +112,17 @@ def main(args):
             transform=transform,
             )
 
+    train_sampler = None
+    if world_size > 1:
+        train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
+
+    # sampler option is mutually exclusive with shuffle 
     train_loader = torch.utils.data.DataLoader(
             dataset=train_dataset,
             batch_size=args.batch_size,
-            shuffle=True,
-            pin_memory=False)
+            num_workers=0,
+            pin_memory=True,
+            sampler=train_sampler)
 
     val_dataset = ChestXrayDataSet(
             data_dir=args.data_dir,
@@ -88,25 +130,28 @@ def main(args):
             transform=transform,
             )
 
+    val_sampler = None
+    if world_size > 1:
+        val_sampler = torch.utils.data.distributed.DistributedSampler(val_dataset)
+
     val_loader = torch.utils.data.DataLoader(
             dataset=val_dataset,
             batch_size=args.batch_size,
-            shuffle=False,
-            pin_memory=False)
+            num_workers=0,
+            pin_memory=True,
+            sampler=val_sampler)
 
-    print('training %d batches %d images' % (len(train_loader), len(train_dataset)))
-    print('validation %d batches %d images' % (len(val_loader), len(val_dataset)))
+    if local_rank == 0:
+        print('training %d batches %d images' % (len(train_loader), len(train_dataset)))
+        print('validation %d batches %d images' % (len(val_loader), len(val_dataset)))
 
     # initialize and load the model
     net = DenseNet121(N_CLASSES)
 
     if args.model_path:
         net.load_state_dict(torch.load(args.model_path, map_location=device))
-        print('model state has loaded.')
-
-    if args.dataparallel and torch.cuda.device_count() > 1:
-        net = torch.nn.DataParallel(net)
-        print('Using %d cuda devices.' % (torch.cuda.device_count()))
+        if local_rank == 0:
+            print('model state has loaded.')
 
     net = net.to(device)
 
@@ -114,12 +159,22 @@ def main(args):
         permute_params(net, True, args.use_lazy_mode)
         permute_momentum(optimizer, True, args.use_lazy_mode)
 
+    if world_size > 1:
+        net = torch.nn.parallel.DistributedDataParallel(net, 
+                bucket_cap_mb=100, 
+                broadcast_buffers=False, 
+                gradient_as_bucket_view=True)
+
     criterion = torch.nn.CrossEntropyLoss()
     #criterion = torch.nn.MultiLabelSoftMarginLoss()
     optimizer = torch.optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum)
 
     for epoch in range(args.epochs):
         start_time = timeit.default_timer()
+
+        if world_size > 1:
+            train_sampler.set_epoch(epoch)
+            val_sampler.set_epoch(epoch)
 
         # initialize the ground truth and output tensor
         y_true = torch.FloatTensor()
@@ -150,13 +205,15 @@ def main(args):
             if args.hpu:
                 htcore.mark_step()
 
-            print('\repoch %3d batch %5d/%5d train loss %6.4f' % (epoch+1, index, len(train_loader), train_loss / index), end='')
-            print(' %6.3fsec' % (timeit.default_timer() - start_time), end='')
+            if local_rank == 0:
+                print('\repoch %3d batch %5d/%5d train loss %6.4f' % (epoch+1, index, len(train_loader), train_loss / index), end='')
+                print(' %6.3fsec' % (timeit.default_timer() - start_time), end='')
 
-            aucs = [roc_auc_score(y_true[:, i], y_pred[:, i]) if y_true[:, i].sum() > 0 else np.nan for i in range(N_CLASSES)]
-            print(' average AUC %5.3f' % (np.mean(aucs)), end='')
+                aucs = [roc_auc_score(y_true[:, i], y_pred[:, i]) if y_true[:, i].sum() > 0 else np.nan for i in range(N_CLASSES)]
+                print(' average AUC %5.3f' % (np.mean(aucs)), end='')
 
-        print('')
+        if local_rank == 0:
+            print('')
 
         y_true = torch.FloatTensor()
         y_pred = torch.FloatTensor()
@@ -176,11 +233,13 @@ def main(args):
             y_true = torch.cat((y_true, labels.cpu()))
             y_pred = torch.cat((y_pred, outputs_mean.cpu()))
 
-            print('\repoch %3d batch %4d/%4d %6.3fsec' % (epoch+1, index, len(val_loader), (timeit.default_timer() - start_time)), end='')
+            if local_rank == 0:
+                print('\repoch %3d batch %4d/%4d %6.3fsec' % (epoch+1, index, len(val_loader), (timeit.default_timer() - start_time)), end='')
 
         aucs = [roc_auc_score(y_true[:, i], y_pred[:, i]) for i in range(N_CLASSES)]
         auc_classes = ' '.join(['%5.3f' % (aucs[i]) for i in range(N_CLASSES)])
-        print(' average AUC %5.3f (%s)' % (np.mean(aucs), auc_classes))
+        if local_rank == 0:
+            print(' average AUC %5.3f (%s)' % (np.mean(aucs), auc_classes))
 
         torch.save(net.state_dict(), 'model/checkpoint.pth')
 
@@ -190,13 +249,19 @@ def main(args):
             transform=transform,
             )
 
+    test_sampler = None
+    if world_size > 1:
+        test_sampler = torch.utils.data.distributed.DistributedSampler(test_dataset)
+
     test_loader = torch.utils.data.DataLoader(
             dataset=test_dataset,
             batch_size=args.batch_size,
-            shuffle=False,
-            pin_memory=False)
+            num_workers=0,
+            pin_memory=True,
+            sampler=test_sampler)
 
-    print('test %d batches %d images' % (len(test_loader), len(test_dataset)))
+    if local_rank == 0:
+        print('test %d batches %d images' % (len(test_loader), len(test_dataset)))
 
     y_true = torch.FloatTensor()
     y_pred = torch.FloatTensor()
@@ -216,28 +281,31 @@ def main(args):
         y_true = torch.cat((y_true, labels.cpu()))
         y_pred = torch.cat((y_pred, outputs_mean.cpu()))
 
-        print('\r%4d/%4d, time: %6.3fsec' % (index, len(test_loader), (timeit.default_timer() - start_time)), end='')
+        if local_rank == 0:
+            print('\r%4d/%4d, time: %6.3fsec' % (index, len(test_loader), (timeit.default_timer() - start_time)), end='')
 
-        aucs = [roc_auc_score(y_true[:, i], y_pred[:, i]) if y_true[:, i].sum() > 0 else np.nan for i in range(N_CLASSES)]
-        auc_classes = ' '.join(['%5.3f' % (aucs[i]) for i in range(N_CLASSES)])
-        print(' average AUC %5.3f (%s)' % (np.mean(aucs), auc_classes), end='')
-    print('')
+            aucs = [roc_auc_score(y_true[:, i], y_pred[:, i]) if y_true[:, i].sum() > 0 else np.nan for i in range(N_CLASSES)]
+            auc_classes = ' '.join(['%5.3f' % (aucs[i]) for i in range(N_CLASSES)])
+            print(' average AUC %5.3f (%s)' % (np.mean(aucs), auc_classes), end='')
+
+    if local_rank == 0:
+        print('')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model_path', default=None, type=str)
+    parser.add_argument('--env_world_size', default='WORLD_SIZE', type=str)
+    parser.add_argument('--env_rank', default='LOCAL_RANK', type=str)
     parser.add_argument('--epochs', default=150, type=int)
     parser.add_argument('--batch_size', default=4, type=int)
     parser.add_argument('--lr', default=1e-4, type=float)
     parser.add_argument('--momentum', default=0.9, type=float)
+    parser.add_argument('--model_path', default=None, type=str)
     parser.add_argument('--data_dir', default='images', type=str)
     parser.add_argument('--hpu', action='store_true', default=False)
     parser.add_argument('--use_lazy_mode', action='store_true', default=True)
-    parser.add_argument('--dataparallel', action='store_true', default=False)
     parser.add_argument('--train_image_list', default='labels/train_list.txt', type=str)
     parser.add_argument('--val_image_list', default='labels/val_list.txt', type=str)
     parser.add_argument('--test_image_list', default='labels/test_list.txt', type=str)
     args = parser.parse_args()
-    print(vars(args))
 
     main(args)
