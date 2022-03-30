@@ -21,4 +21,4 @@ echo "CPUS=${CPUS} CORES=${CORES} TOTAL_CORES=${TOTAL_CORES} HPUS=${HPUS}"
 export OMP_NUM_THREADS=${CORES_PER_PROC}
 export KMP_SETTING="KMP_AFFINITY=granularity=fine,compact,1,0"
 
-torchrun --nnodes=1 --nproc_per_node=${HPUS} main.py --hpu --batch_size 4
+torchrun --nnodes=1 --nproc_per_node=${HPUS} main.py --hpu --batch_size 4 --train_image_list labels/bmt_list.txt
