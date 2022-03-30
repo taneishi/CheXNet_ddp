@@ -8,8 +8,6 @@ if [ ${PBS_O_WORKDIR} ]; then
     cd ${PBS_O_WORKDIR}
 fi
 
-pip install -r requirements.txt
-
 CPUS=2
 CORES=24
 TOTAL_CORES=$((${CPUS}*${CORES}))

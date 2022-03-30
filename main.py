@@ -157,7 +157,6 @@ def main(args):
 
         if world_size > 1:
             train_sampler.set_epoch(epoch)
-            val_sampler.set_epoch(epoch)
 
         # initialize the ground truth and output tensor
         y_true = torch.FloatTensor()
@@ -176,7 +175,7 @@ def main(args):
             loss = criterion(outputs_mean, labels)
             train_loss += loss.item()
 
-            y_true = torch.cat((y_true, labels.cpu()))
+            y_true = torch.cat((y_true, labels.detach().cpu()))
             y_pred = torch.cat((y_pred, outputs_mean.detach().cpu()))
 
             # backward and optimize
@@ -198,8 +197,7 @@ def main(args):
 
         if local_rank == 0:
             print('')
-
-        torch.save(net.state_dict(), 'model/checkpoint.pth')
+            torch.save(net.state_dict(), 'model/checkpoint.pth')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
