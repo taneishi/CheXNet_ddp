@@ -1,4 +1,4 @@
-# Optimization of a classification model for thoracic diseases with PyTorch on Habana Gaudi and CUDA device.
+# Optimization of a classification model for thoracic diseases using PyTorch on Habana Gaudi and CUDA devices.
 
 ## Introduction
 
