@@ -124,26 +124,8 @@ def main(args):
             pin_memory=True,
             sampler=train_sampler)
 
-    val_dataset = ChestXrayDataSet(
-            data_dir=args.data_dir,
-            image_list_file=args.val_image_list,
-            transform=transform,
-            )
-
-    val_sampler = None
-    if world_size > 1:
-        val_sampler = torch.utils.data.distributed.DistributedSampler(val_dataset)
-
-    val_loader = torch.utils.data.DataLoader(
-            dataset=val_dataset,
-            batch_size=args.batch_size,
-            num_workers=0,
-            pin_memory=True,
-            sampler=val_sampler)
-
     if local_rank == 0:
         print('training %d batches %d images' % (len(train_loader), len(train_dataset)))
-        print('validation %d batches %d images' % (len(val_loader), len(val_dataset)))
 
     # initialize and load the model
     net = DenseNet121(N_CLASSES)
@@ -154,6 +136,8 @@ def main(args):
             print('model state has loaded.')
 
     net = net.to(device)
+
+    optimizer = torch.optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum)
 
     if args.hpu:
         permute_params(net, True, args.use_lazy_mode)
@@ -167,7 +151,6 @@ def main(args):
 
     criterion = torch.nn.CrossEntropyLoss()
     #criterion = torch.nn.MultiLabelSoftMarginLoss()
-    optimizer = torch.optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum)
 
     for epoch in range(args.epochs):
         start_time = timeit.default_timer()
@@ -210,86 +193,13 @@ def main(args):
                 print(' %6.3fsec' % (timeit.default_timer() - start_time), end='')
 
                 aucs = [roc_auc_score(y_true[:, i], y_pred[:, i]) if y_true[:, i].sum() > 0 else np.nan for i in range(N_CLASSES)]
+                auc_classes = ' '.join(['%5.3f' % (aucs[i]) for i in range(N_CLASSES)])
                 print(' average AUC %5.3f' % (np.mean(aucs)), end='')
 
         if local_rank == 0:
             print('')
 
-        y_true = torch.FloatTensor()
-        y_pred = torch.FloatTensor()
-
-        net.eval()
-        for index, (images, labels) in enumerate(val_loader, 1):
-            start_time = timeit.default_timer()
-
-            batch_size, n_crops, c, h, w = images.size()
-            images = images.view(-1, c, h, w).to(device)
-
-            with torch.no_grad():
-                outputs = net(images)
-
-            outputs_mean = outputs.view(batch_size, n_crops, -1).mean(1)
-
-            y_true = torch.cat((y_true, labels.cpu()))
-            y_pred = torch.cat((y_pred, outputs_mean.cpu()))
-
-            if local_rank == 0:
-                print('\repoch %3d batch %4d/%4d %6.3fsec' % (epoch+1, index, len(val_loader), (timeit.default_timer() - start_time)), end='')
-
-        aucs = [roc_auc_score(y_true[:, i], y_pred[:, i]) for i in range(N_CLASSES)]
-        auc_classes = ' '.join(['%5.3f' % (aucs[i]) for i in range(N_CLASSES)])
-        if local_rank == 0:
-            print(' average AUC %5.3f (%s)' % (np.mean(aucs), auc_classes))
-
         torch.save(net.state_dict(), 'model/checkpoint.pth')
-
-    test_dataset = ChestXrayDataSet(
-            data_dir=args.data_dir,
-            image_list_file=args.test_image_list,
-            transform=transform,
-            )
-
-    test_sampler = None
-    if world_size > 1:
-        test_sampler = torch.utils.data.distributed.DistributedSampler(test_dataset)
-
-    test_loader = torch.utils.data.DataLoader(
-            dataset=test_dataset,
-            batch_size=args.batch_size,
-            num_workers=0,
-            pin_memory=True,
-            sampler=test_sampler)
-
-    if local_rank == 0:
-        print('test %d batches %d images' % (len(test_loader), len(test_dataset)))
-
-    y_true = torch.FloatTensor()
-    y_pred = torch.FloatTensor()
-
-    net.eval()
-    for index, (images, labels) in enumerate(test_loader, 1):
-        start_time = timeit.default_timer()
-
-        batch_size, n_crops, c, h, w = images.size()
-        images = images.view(-1, c, h, w)
-
-        with torch.no_grad():
-            outputs = net(images)
-
-        output_mean = outputs.view(batch_size, n_crops, -1).mean(1)
-
-        y_true = torch.cat((y_true, labels.cpu()))
-        y_pred = torch.cat((y_pred, outputs_mean.cpu()))
-
-        if local_rank == 0:
-            print('\r%4d/%4d, time: %6.3fsec' % (index, len(test_loader), (timeit.default_timer() - start_time)), end='')
-
-            aucs = [roc_auc_score(y_true[:, i], y_pred[:, i]) if y_true[:, i].sum() > 0 else np.nan for i in range(N_CLASSES)]
-            auc_classes = ' '.join(['%5.3f' % (aucs[i]) for i in range(N_CLASSES)])
-            print(' average AUC %5.3f (%s)' % (np.mean(aucs), auc_classes), end='')
-
-    if local_rank == 0:
-        print('')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -304,8 +214,6 @@ if __name__ == '__main__':
     parser.add_argument('--hpu', action='store_true', default=False)
     parser.add_argument('--use_lazy_mode', action='store_true', default=True)
     parser.add_argument('--train_image_list', default='labels/train_list.txt', type=str)
-    parser.add_argument('--val_image_list', default='labels/val_list.txt', type=str)
-    parser.add_argument('--test_image_list', default='labels/test_list.txt', type=str)
     args = parser.parse_args()
 
     main(args)
