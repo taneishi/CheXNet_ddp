@@ -188,7 +188,8 @@ def main(args):
                 htcore.mark_step()
 
             if local_rank == 0:
-                print('\repoch %3d batch %5d/%5d train loss %6.4f' % (epoch+1, index, len(train_loader), train_loss / index), end='')
+                print('\repoch %3d/%3d batch %5d/%5d' % (epoch+1, args.epochs, index, len(train_loader)), end='')
+                print(' train loss %6.4f' % (train_loss / index), end='')
                 print(' %6.3fsec' % (timeit.default_timer() - start_time), end='')
 
                 aucs = [roc_auc_score(y_true[:, i], y_pred[:, i]) if y_true[:, i].sum() > 0 else np.nan for i in range(N_CLASSES)]

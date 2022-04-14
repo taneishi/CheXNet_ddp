@@ -6,18 +6,18 @@ Medical imaging is an indispensable technology for modern medicine, and the appl
 A typical example is image reading using medical images such as X-rays, CT, MRI, etc.
 By constructing a model that estimates the name of the disease and the location of the disease using convolutional networks (CNNs), etc., for medical images,
 it is expected to reduce the burden on the image reading physician, equalize the diagnostic criteria,
-and realize diagnosis that exceeds human capabilities, although diagnosis through reading is still the responsibility of the physician.
+and realize diagnosis that exceeds human capabilities, although diagnosis through reading is still the responsibility of the physicians.
 
 On the other hand, there are several challenges in deep learning for medical images. 
 One is the collection and labeling of medical images, which requires collecting as many images as necessary for training, 
 considering patient privacy, and attaching high-quality labels for training. 
 In 2017, the National Institutes of Health (NIH) released a large dataset called ChestX-ray14, described below. 
 Other medical institutions have also begun to release medical image datasets with case labels, and the environment for developing models for clinical use is now in place. 
-*CheXNet*, which I used in this repository, is one of the models proposed in this study.
+*CheXNet* which I used here is one of the models proposed in this study.
 
 ## Dataset
 
-I used ChestX-ray14 as a dataset. This dataset is a chest X-ray image dataset provided by NIH. 
+The dataset used in this study is ChestX-ray14 which is a chest X-ray image dataset provided by NIH. 
 112,120 chest X-ray images of 30,805 patients are associated with multiple labels corresponding to each image from 14 different diseases. 
 This data set is divided into training set (70%), validation set (10%), and test set (20%).
 
@@ -59,16 +59,40 @@ First, run the script to download the dataset.
 bash batch_download.sh
 ```
 
-The next step is to set up a Python environment to optimize and quantize the model. This procedure is described in `run.sh`.
+The next step is to install Python module dependencies to train the model. This procedure is described in `run.sh`.
+
+```bash
+pip install -r requirements.txt
+```
+
+The following command performs distributed data parallel (DDP) training on Habana Gaudi node.
+
+```bash
+torchrun --nnodes=1 --nproc_per_node=8 main.py --hpu
+```
+
+The following script summerizes the above operations.
 
 ```bash
 bash run.sh
 ```
 
-The following scripts are used to perform inference on the PyTorch, FP32 optimized and INT8 quantized models, respectively.
-
-```bash
-python main.py
-```
 
 ## Results
+
+```
+Loading Habana modules from /usr/local/lib/python3.7/dist-packages/habana_frameworks/torch/lib
+Using hpu device.
+training 3750 batches 14999 images
+validation 3750 batches 14999 images
+epoch   1 batch  3750/ 3750 train loss 1.5167 899.075sec
+epoch   2 batch  3750/ 3750 train loss 1.4969 859.069sec
+epoch   3 batch  3750/ 3750 train loss 1.4927 855.588sec
+epoch   4 batch  3750/ 3750 train loss 1.4897 860.172sec
+epoch   5 batch  3750/ 3750 train loss 1.4869 857.432sec
+epoch   6 batch  3750/ 3750 train loss 1.4844 854.443sec
+epoch   7 batch  3750/ 3750 train loss 1.4810 856.479sec
+epoch   8 batch  3750/ 3750 train loss 1.4797 857.910sec
+epoch   9 batch  3750/ 3750 train loss 1.4764 854.350sec
+epoch  10 batch  3750/ 3750 train loss 1.4747 855.574sec
+```
