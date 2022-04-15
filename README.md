@@ -1,4 +1,4 @@
-# Optimization of a classification model for thoracic diseases using PyTorch on Habana Gaudi and CUDA devices.
+# Acceleration of a classification model for thoracic diseases using PyTorch on Habana Gaudi and CUDA devices.
 
 ## Introduction
 
@@ -77,7 +77,6 @@ The following script summerizes the above operations.
 bash run.sh
 ```
 
-
 ## Results
 
 ```
@@ -95,4 +94,5 @@ epoch   7 batch  3750/ 3750 train loss 1.4810 856.479sec
 epoch   8 batch  3750/ 3750 train loss 1.4797 857.910sec
 epoch   9 batch  3750/ 3750 train loss 1.4764 854.350sec
 epoch  10 batch  3750/ 3750 train loss 1.4747 855.574sec
+...
 ```
