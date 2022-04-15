@@ -1,4 +1,4 @@
-# Acceleration of a classification model for thoracic diseases using PyTorch on Habana Gaudi and CUDA devices.
+# Acceleration of a classification model for thoracic diseases using PyTorch on Habana Gaudi node.
 
 ## Introduction
 
@@ -50,6 +50,11 @@ As a model, I use an improved version of *CheXNet*, a model proposed by Rajpurka
 The structure of the neural network is based on DenseNet121, and the output layer for classification into 14 diseases is added to the trained model by ImageNet, and fine-tuning is performed by ChestX-ray14.
 
 - [CheXNet](https://arxiv.org/abs/1711.05225)
+
+## Environments
+
+In addition to using GPUs with CUDA, this implementation includes code to accelerate with nodes equipped with Habana Gaudi.
+The Habana Gaudi was tested on Amazon Web Service (AWS) dl1.24xlarge instances.
 
 ## Usage
 
